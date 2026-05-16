@@ -1,5 +1,5 @@
 // server.js
-// Serveur WebSocket simple pour TurboWarp + API Mistral
+// Serveur WebSocket minimal TurboWarp <-> Mistral
 // Compatible Render.com
 
 import express from "express";
@@ -12,49 +12,35 @@ dotenv.config();
 const app = express();
 
 app.get("/", (req, res) => {
-  res.send("WebSocket server online");
+  res.send("Server online");
 });
 
 const server = http.createServer(app);
 
 const wss = new WebSocketServer({ server });
 
-const SYSTEM_PROMPT = `
-Tu es un ordinateur légèrement défaillant.
-Tu réponds de manière étrange mais utile.
-Tu peux parfois hésiter ou glitcher.
-Réponses courtes.
-`;
-
 wss.on("connection", (ws) => {
   console.log("Client connected");
 
-  // Historique propre à CE client
-  const history = [
-    {
-      role: "system",
-      content: SYSTEM_PROMPT,
-    },
-  ];
+  // Historique de conversation pour CE client
+  const history = [];
 
   ws.on("message", async (message) => {
     try {
       const userMessage = message.toString();
 
-      console.log("User:", userMessage);
-
-      // Ajout message utilisateur
+      // Ajoute le message utilisateur
       history.push({
         role: "user",
         content: userMessage,
       });
 
-      // Limite historique
-      if (history.length > 20) {
-        history.splice(1, 2);
+      // Limite l'historique
+      if (history.length > 30) {
+        history.splice(0, 2);
       }
 
-      // Requête API Mistral
+      // Appel API Mistral
       const response = await fetch(
         "https://api.mistral.ai/v1/chat/completions",
         {
@@ -66,28 +52,24 @@ wss.on("connection", (ws) => {
           body: JSON.stringify({
             model: "mistral-small-latest",
             messages: history,
-            temperature: 0.9,
           }),
         }
       );
 
       const data = await response.json();
 
-      // Récupération réponse IA
       const aiMessage =
-        data?.choices?.[0]?.message?.content ||
-        "ERR0R... mémoire inaccessible.";
+        data?.choices?.[0]?.message?.content || "No response";
 
-      console.log("AI:", aiMessage);
-
-      // Sauvegarde historique
+      // Sauvegarde réponse IA
       history.push({
         role: "assistant",
         content: aiMessage,
       });
 
-      // Envoi à TurboWarp
+      // Renvoie à TurboWarp
       ws.send(aiMessage);
+
     } catch (err) {
       console.error(err);
 
@@ -105,7 +87,7 @@ wss.on("connection", (ws) => {
   });
 });
 
-// Render fournit le port automatiquement
+// Port Render
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
